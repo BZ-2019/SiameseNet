@@ -20,29 +20,32 @@ model_urls = {
 
 class VGG(nn.Module):
 
-    def __init__(self, features, num_classes=10):
+    def __init__(self, features, num_classes=2):
         super(VGG, self).__init__()
         self.features = features
         self.classifierpari = nn.Sequential(
-            nn.Linear(512 * 7 * 7, 4096),
+            nn.Linear(512*2 * 7 * 7, 4096),
             nn.ReLU(True),
             nn.Dropout(),
             nn.Linear(4096, 4096),
             nn.ReLU(True),
             nn.Dropout(),
             nn.Linear(4096, num_classes),
+            nn.Sigmoid()
         )
         self._initialize_weights()
 
     def forward(self, rawx,parix):
         rawx = self.features(rawx)
         parix = self.features(parix)
-        #x = rawx + parix
-        rawx = rawx.view(rawx.size(0), -1)
-        parix = parix.view(parix.size(0), -1)
-        rawx = self.classifierpari(rawx)
-        parix = self.classifierpari(parix)
-        return rawx, parix
+        add = torch.cat((rawx,parix),1)
+        #rawx = rawx.view(rawx.size(0), -1)
+        #parix = parix.view(parix.size(0), -1)
+        add = add.view(parix.size(0), -1)
+        out = self.classifierpari(add)
+
+        #parix = self.classifierpari(parix)
+        return out
 
     def _initialize_weights(self):
         for m in self.modules():
