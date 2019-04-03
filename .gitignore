@@ -1,7 +1,7 @@
 *.pt
-__pycache__/
+/__pycache__/
 *.jpg
 *.JPG
 *.txt
 *.log
-.idea/
+\.idea\

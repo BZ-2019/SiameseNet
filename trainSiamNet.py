@@ -12,7 +12,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 import Siamesevgg
 parser = argparse.ArgumentParser(description='SiameseNet')
-parser.add_argument('--save', type=str, default='./SiameseNet.pt',
+parser.add_argument('--save', type=str, default='./SiameseNet_20.pt',
                     help='path to save the final model')
 parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
@@ -37,7 +37,7 @@ parser.add_argument('--rawpicroot', type=str, default='E:\\liuyuming\\SiameseNet
 parser.add_argument('--turepicroot', type=str, default='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\regionture/')
 parser.add_argument('--falsepicroot', type=str, default='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\regionfalse/')
 parser.add_argument('--GPU', type=int, default=1)
-parser.add_argument('--Train', type=bool, default=True)
+parser.add_argument('--Train', type=bool, default=False)
 args = parser.parse_args()
 use_cuda = torch.cuda.is_available() and not args.unuse_cuda
 if args.Train:
@@ -84,7 +84,7 @@ if args.Train==True:
     #model_dict.update(pretrained_dict)
     #Siamesenet.load_state_dict(model_dict)
     Siamesenet._initialize_weights()
-    Siamesenet = torch.nn.DataParallel(Siamesenet, device_ids=[1, 2, 3])
+    #Siamesenet = torch.nn.DataParallel(Siamesenet, device_ids=[1, 2, 3])
 else:
     Siamesenet.load_state_dict(torch.load(args.save)['model'])
 if use_cuda:
@@ -233,7 +233,7 @@ try:
             loss = train()
             print("*****************************************************&*********")
             print(epoch,loss)
-            if epoch:               #print("val_loss: {:5.2f}".format(val_loss))
+            if (epoch%5==0):               #print("val_loss: {:5.2f}".format(val_loss))
                 model_state_dict = Siamesenet.state_dict()
                 model_source = {
                     "settings": args,
