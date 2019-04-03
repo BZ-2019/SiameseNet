@@ -30,8 +30,8 @@ class VGG(nn.Module):
             nn.Linear(4096, 4096),
             nn.ReLU(True),
             nn.Dropout(),
-            nn.Linear(4096, num_classes),
-            nn.Sigmoid()
+            nn.Linear(4096, num_classes)#,
+            #nn.Sigmoid()
         )
         self._initialize_weights()
 

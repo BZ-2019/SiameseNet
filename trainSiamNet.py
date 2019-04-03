@@ -12,15 +12,15 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 import Siamesevgg
 parser = argparse.ArgumentParser(description='SiameseNet')
-parser.add_argument('--save', type=str, default='./SiameseNet_1.pt',
+parser.add_argument('--save', type=str, default='./SiameseNet.pt',
                     help='path to save the final model')
 parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
 parser.add_argument('--unuse-cuda', action='store_true',
                     help='unuse cuda')
 
-parser.add_argument('--lr', type=float, default=0.001)   #20190401 0.000001
-parser.add_argument('--epochs', type=int, default=2,
+parser.add_argument('--lr', type=float, default=0.0001)   #20190401 0.000001
+parser.add_argument('--epochs', type=int, default=100,
                     help='number of epochs for train')
 parser.add_argument('--batch_size', type=int, default=32,
                     help='batch size for training')
@@ -32,35 +32,38 @@ parser.add_argument('--dropout', type=float, default=0.)
 parser.add_argument('--num-class', type=int, default=2)
 parser.add_argument('--growth-rate', type=int, default=12)
 parser.add_argument('--channels', type=int, default=1)
-parser.add_argument('--root', type=str, default='/home/liuyuming/SiameseNet/数据/武汉180605/')
-parser.add_argument('--rawpicroot', type=str, default='/home/liuyuming/SiameseNet/数据/武汉180605/L_regionraw/')
-parser.add_argument('--turepicroot', type=str, default='/home/liuyuming/SiameseNet/数据/武汉180605/L_regionture/')
-parser.add_argument('--falsepicroot', type=str, default='/home/liuyuming/SiameseNet/数据/武汉180605/L_regionfalse/')
-parser.add_argument('--GPU', type=int, default=0)
-parser.add_argument('--Train', type=bool, default=False)
+parser.add_argument('--root', type=str, default='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\')
+parser.add_argument('--rawpicroot', type=str, default='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\regionraw/')
+parser.add_argument('--turepicroot', type=str, default='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\regionture/')
+parser.add_argument('--falsepicroot', type=str, default='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\regionfalse/')
+parser.add_argument('--GPU', type=int, default=1)
+parser.add_argument('--Train', type=bool, default=True)
 args = parser.parse_args()
 use_cuda = torch.cuda.is_available() and not args.unuse_cuda
-torch.cuda.set_device(1)
-transform=transforms.Compose([
+if args.Train:
+    torch.cuda.set_device(args.GPU)
+else:
+    torch.cuda.set_device(args.GPU+1)
+transform = transforms.Compose([
     transforms.ToTensor(), #将图片转换为Tensor,归一化至[0,1]
     transforms.Normalize(mean=[.5,.5,.5],std=[.5,.5,.5]) #标准化至[-1,1]
 ])
-print("迭代20次，小规模数据，adam lr0.001 batch32")
+print("迭代%d次，小规模数据，adam lr:%f, batch:%d"%(args.epochs, args.lr, args.batch_size))
 
 
 
 args.dropout = args.dropout if args.augmentation else 0.
 
 if args.Train==True:
-    train_data=MyData.MyDataset(rawroot=args.rawpicroot,tureroot=args.turepicroot,falseroot=args.falsepicroot,datatxt='/home/liuyuming/SiameseNet/数据/武汉180605/L_regionlisttrain.txt', transform=transform)
+    train_data=MyData.MyDataset(rawroot=args.rawpicroot,tureroot=args.turepicroot,falseroot=args.falsepicroot,datatxt='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\regionlisttrain.txt', transform=transform)
     data_loader = DataLoader(train_data, batch_size=args.batch_size,shuffle=True)
     print(len(data_loader))
 
-    val_data=MyData.MyDataset(rawroot=args.rawpicroot,tureroot=args.turepicroot,falseroot=args.falsepicroot,datatxt='/home/liuyuming/SiameseNet/数据/武汉180605/regionlistval.txt', transform=transform)
+    val_data=MyData.MyDataset(rawroot=args.rawpicroot,tureroot=args.turepicroot,falseroot=args.falsepicroot,datatxt='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\regionlistval.txt', transform=transform)
     val_loader = DataLoader(val_data, batch_size=1,shuffle=False)
     print(len(val_loader))
 else:
-    test_data=MyData.TestDataset(rawroot=args.rawpicroot,tureroot=args.turepicroot,datatxt='/home/liuyuming/SiameseNet/数据/武汉180605/L_regionlisttest.txt', transform=transform)
+    test_data=MyData.TestDataset(rawroot=args.rawpicroot,tureroot=args.turepicroot,datatxt='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\regionlistval.txt', transform=transform)
     test_loader = DataLoader(test_data, batch_size=4,shuffle=False)
     print(len(test_loader))
 
@@ -74,17 +77,20 @@ Siamesenet = Siamesevgg.vgg16()
 
 if args.Train==True:
     model_dict = Siamesenet.state_dict()
-    vgg = models.vgg16(pretrained=True)
-    pretrained_dict = vgg.state_dict()
-    pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
-
-    model_dict.update(pretrained_dict)
-    Siamesenet.load_state_dict(model_dict)
-    #Siamesenet._initialize_weights()
+    vgg = models.vgg16(pretrained=False)
+    #pretrained_dict = vgg.state_dict()
+    #pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+#
+    #model_dict.update(pretrained_dict)
+    #Siamesenet.load_state_dict(model_dict)
+    Siamesenet._initialize_weights()
+    Siamesenet = torch.nn.DataParallel(Siamesenet, device_ids=[1, 2, 3])
 else:
     Siamesenet.load_state_dict(torch.load(args.save)['model'])
 if use_cuda:
     Siamesenet = Siamesenet.cuda()
+
+
 optimizer = torch.optim.Adam(Siamesenet.parameters(), lr=args.lr)
 criterion = torch.nn.CrossEntropyLoss()
 L1loss = torch.nn.L1Loss()
@@ -112,9 +118,8 @@ def train():
         optimizer.step()
 
         total_loss += loss.data
-        #0print(loss.data)
-    return total_loss
-
+        print(loss.data)
+    return total_loss/len(data_loader)
 
 def val():
     corrects = total_loss = 0
@@ -125,6 +130,7 @@ def val():
             rawdata, paridata, label = rawdata.cuda(),paridata.cuda(), label.cuda().float()
         #rawout,pariout = Siamesenet(rawdata,paridata)
         out = Siamesenet(rawdata, paridata)
+
         loss = criterion(out, label)
         total_loss += loss.data
         #corrects += (torch.max(target, 1)[1].view(label.size()).data == label.data).sum()
@@ -140,6 +146,7 @@ def test(f):
         if use_cuda:
             rawdata, paridata, label = rawdata.cuda(),paridata.cuda(), label.cuda().float()
         out = Siamesenet(rawdata, paridata)
+        out = F.softmax(out)
         scorewrite,predicttemp = torch.max(out,1)
         #rawout,pariout = Siamesenet(rawdata,paridata)
         #euclidean_distance = F.pairwise_distance(rawout, pariout).cpu()
@@ -156,7 +163,7 @@ def test(f):
     return len(test_loader),corrects
 
 def readedgexml():
-    edgeboxregionroot = args.root + 'L_edgeboxlabel/'
+    edgeboxregionroot = args.root + 'edgeboxlabel/'
     testimglist = args.root + 'testlist.txt'
     edgelabeldict={}
     with open(testimglist , 'r') as ftl:
@@ -165,12 +172,15 @@ def readedgexml():
                 break
             labellist=[]
             try:
-                with open(edgeboxregionroot + line[0:-5]+'.txt', 'r') as fxml:
+                with open(edgeboxregionroot + line[0:5]+'.txt', 'r') as fxml:
                     for labelline in fxml.readlines():
                         if not labelline:
                             break
                         labellist.append(labelline)
-                edgelabeldict[line]=labellist
+                if line[-1]=='\n':
+                    edgelabeldict[line] = labellist
+                else:
+                    edgelabeldict[line + '\n'] = labellist
             except:
                 continue
 
@@ -179,7 +189,7 @@ def readedgexml():
 def predict():
     edgelabeldict = readedgexml()
     predictlist = args.root + 'predictabnormal.txt'
-    testimgroot = args.root + 'L_test/'
+    testimgroot = args.root + 'VAL/'
     resroot = args.root + 'resroot/'
     img=[]
     lastfilename=[]
@@ -220,12 +230,10 @@ try:
         for epoch in range(1, args.epochs+1):
             epoch_start_time = time.time()   
             print("begin")
-            loss= train()
-            print("*******************")
+            loss = train()
+            print("*****************************************************&*********")
             print(epoch,loss)
-            if(epoch):
-                #val_loss = val()
-                #print("val_loss: {:5.2f}".format(val_loss))
+            if epoch:               #print("val_loss: {:5.2f}".format(val_loss))
                 model_state_dict = Siamesenet.state_dict()
                 model_source = {
                     "settings": args,
@@ -233,7 +241,7 @@ try:
                 }
                 model_name = 'SiameseNet' + '_' + str(epoch) + '.pt'
                 torch.save(model_source, model_name)
-            print("*******************")
+            print("***************************************************************")
 
         model_state_dict = Siamesenet.state_dict()
         model_source = {
@@ -242,11 +250,11 @@ try:
         }
         torch.save(model_source, args.save)
     else:
-        f = open('/home/liuyuming/SiameseNet/数据/武汉180605/predictabnormal.txt','w')
+        f = open('E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\predictabnormal.txt','w')
         count,result = test(f)
         f.close()
         predict()
-        print("test sdone")
+        print("test done acc = %.4f"%(count/result))
 
 
 except KeyboardInterrupt:
