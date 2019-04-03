@@ -12,7 +12,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 import Siamesevgg
 parser = argparse.ArgumentParser(description='SiameseNet')
-parser.add_argument('--save', type=str, default='./SiameseNet.pt',
+parser.add_argument('--save', type=str, default='./SiameseNet_1.pt',
                     help='path to save the final model')
 parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
@@ -37,7 +37,7 @@ parser.add_argument('--rawpicroot', type=str, default='/home/liuyuming/SiameseNe
 parser.add_argument('--turepicroot', type=str, default='/home/liuyuming/SiameseNet/数据/武汉180605/L_regionture/')
 parser.add_argument('--falsepicroot', type=str, default='/home/liuyuming/SiameseNet/数据/武汉180605/L_regionfalse/')
 parser.add_argument('--GPU', type=int, default=0)
-parser.add_argument('--Train', type=bool, default=True)
+parser.add_argument('--Train', type=bool, default=False)
 args = parser.parse_args()
 use_cuda = torch.cuda.is_available() and not args.unuse_cuda
 torch.cuda.set_device(1)

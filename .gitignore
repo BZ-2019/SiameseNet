@@ -4,3 +4,4 @@ __pycache__/
 *.JPG
 *.txt
 *.log
+.idea/
