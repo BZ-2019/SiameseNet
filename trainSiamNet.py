@@ -12,7 +12,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 import Siamesevgg
 parser = argparse.ArgumentParser(description='SiameseNet')
-parser.add_argument('--save', type=str, default='./SiameseNet_20.pt',
+parser.add_argument('--save', type=str, default='./SiameseNet.pt',
                     help='path to save the final model')
 parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
@@ -37,7 +37,7 @@ parser.add_argument('--rawpicroot', type=str, default='E:\\liuyuming\\SiameseNet
 parser.add_argument('--turepicroot', type=str, default='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\regionture/')
 parser.add_argument('--falsepicroot', type=str, default='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\regionfalse/')
 parser.add_argument('--GPU', type=int, default=1)
-parser.add_argument('--Train', type=bool, default=False)
+parser.add_argument('--Train', type=bool, default=True)
 args = parser.parse_args()
 use_cuda = torch.cuda.is_available() and not args.unuse_cuda
 if args.Train:
@@ -60,7 +60,7 @@ if args.Train==True:
     print(len(data_loader))
 
     val_data=MyData.MyDataset(rawroot=args.rawpicroot,tureroot=args.turepicroot,falseroot=args.falsepicroot,datatxt='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\regionlistval.txt', transform=transform)
-    val_loader = DataLoader(val_data, batch_size=1,shuffle=False)
+    val_loader = DataLoader(val_data, batch_size=1,shuffle=True)
     print(len(val_loader))
 else:
     test_data=MyData.TestDataset(rawroot=args.rawpicroot,tureroot=args.turepicroot,datatxt='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\regionlistval.txt', transform=transform)
@@ -140,6 +140,7 @@ def val():
 
 def test(f):
     corrects = total_loss = 0
+    count =0
     for i, (rawdata, paridata, label,fn) in enumerate(test_loader):
         paridata, label = Variable(paridata), Variable(label)
         rawdata = Variable(rawdata)
@@ -156,11 +157,13 @@ def test(f):
         #scorewrite = out.detach().cpu().numpy().copy()
         scorewrite = scorewrite.detach().cpu().numpy()
         corrects +=(predicttemp== label.long().data).cpu().sum().numpy()
+        count +=rawdata.shape[0]
+
         temp = np.where(predicttemp.cpu() ==1)[0]
         for a in range(len(temp)):
             print(fn[temp[a]] + '_' + str(scorewrite[temp[a]]) + '\n')
             f.write(fn[temp[a]]+'_'+str(scorewrite[temp[a]])+'_'+'\n')
-    return len(test_loader),corrects
+    return count,corrects
 
 def readedgexml():
     edgeboxregionroot = args.root + 'edgeboxlabel/'
@@ -254,7 +257,7 @@ try:
         count,result = test(f)
         f.close()
         predict()
-        print("test done acc = %.4f"%(count/result))
+        print("test done.regioncount:%d,predict:%d, acc = %.4f"%(count,result,result/count))
 
 
 except KeyboardInterrupt:
