@@ -11,16 +11,19 @@ import time
 from torch.autograd import Variable
 import torch.nn.functional as F
 import Siamesevgg
+import os
 parser = argparse.ArgumentParser(description='SiameseNet')
-parser.add_argument('--save', type=str, default='./SiameseNet.pt',
+parser.add_argument('--save', type=str, default='./SiameseNet_10.pt',
                     help='path to save the final model')
+
+
 parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
 parser.add_argument('--unuse-cuda', action='store_true',
                     help='unuse cuda')
 
 parser.add_argument('--lr', type=float, default=0.0001)   #20190401 0.000001
-parser.add_argument('--epochs', type=int, default=100,
+parser.add_argument('--epochs', type=int, default=20,
                     help='number of epochs for train')
 parser.add_argument('--batch_size', type=int, default=32,
                     help='batch size for training')
@@ -33,12 +36,23 @@ parser.add_argument('--num-class', type=int, default=2)
 parser.add_argument('--growth-rate', type=int, default=12)
 parser.add_argument('--channels', type=int, default=1)
 parser.add_argument('--root', type=str, default='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\')
-parser.add_argument('--rawpicroot', type=str, default='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\regionraw/')
-parser.add_argument('--turepicroot', type=str, default='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\regionture/')
-parser.add_argument('--falsepicroot', type=str, default='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\regionfalse/')
 parser.add_argument('--GPU', type=int, default=1)
-parser.add_argument('--Train', type=bool, default=True)
+parser.add_argument('--Train', type=bool, default=False)
 args = parser.parse_args()
+dataset = 'VAL/'
+rawpicroot = args.root+'regionraw/'
+turepicroot = args.root+'regionture/'
+falsepicroot = args.root+'regionfalse/'
+RegionListTrain = args.root+'regionlisttrain.txt'
+RegionListVal = args.root+'regionlisttrain.txt'
+RegionListTest = args.root+'regionlistval.txt'
+
+edgeboxregionroot = args.root + 'edgeboxlabel/'
+testimglist = args.root + 'testlistall.txt'
+predtxtroot = args.root + 'restxt/'+dataset
+predictlist = args.root + 'predictabnormal.txt'
+testimgroot = args.root + 'MergeImg/'
+resroot = args.root + 'resroot/'
 use_cuda = torch.cuda.is_available() and not args.unuse_cuda
 if args.Train:
     torch.cuda.set_device(args.GPU)
@@ -55,16 +69,16 @@ print("迭代%d次，小规模数据，adam lr:%f, batch:%d"%(args.epochs, args.
 args.dropout = args.dropout if args.augmentation else 0.
 
 if args.Train==True:
-    train_data=MyData.MyDataset(rawroot=args.rawpicroot,tureroot=args.turepicroot,falseroot=args.falsepicroot,datatxt='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\regionlisttrain.txt', transform=transform)
+    train_data=MyData.MyDataset(rawroot=rawpicroot,tureroot=turepicroot,falseroot=falsepicroot,datatxt=RegionListTrain, transform=transform)
     data_loader = DataLoader(train_data, batch_size=args.batch_size,shuffle=True)
     print(len(data_loader))
 
-    val_data=MyData.MyDataset(rawroot=args.rawpicroot,tureroot=args.turepicroot,falseroot=args.falsepicroot,datatxt='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\regionlistval.txt', transform=transform)
-    val_loader = DataLoader(val_data, batch_size=1,shuffle=True)
+    val_data=MyData.MyDataset(rawroot=rawpicroot,tureroot=turepicroot,falseroot=falsepicroot,datatxt=RegionListVal, transform=transform)
+    val_loader = DataLoader(val_data, batch_size=128,shuffle=True)
     print(len(val_loader))
 else:
-    test_data=MyData.TestDataset(rawroot=args.rawpicroot,tureroot=args.turepicroot,datatxt='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\regionlistval.txt', transform=transform)
-    test_loader = DataLoader(test_data, batch_size=4,shuffle=False)
+    test_data=MyData.TestDataset(rawroot=rawpicroot,tureroot=turepicroot,datatxt=RegionListTest, transform=transform)
+    test_loader = DataLoader(test_data, batch_size=32,shuffle=False)
     print(len(test_loader))
 
 # ##############################################################################
@@ -141,6 +155,7 @@ def val():
 def test(f):
     corrects = total_loss = 0
     count =0
+    Siamesenet.eval()
     for i, (rawdata, paridata, label,fn) in enumerate(test_loader):
         paridata, label = Variable(paridata), Variable(label)
         rawdata = Variable(rawdata)
@@ -159,15 +174,14 @@ def test(f):
         corrects +=(predicttemp== label.long().data).cpu().sum().numpy()
         count +=rawdata.shape[0]
 
-        temp = np.where(predicttemp.cpu() ==1)[0]
+        temp = np.where(predicttemp.cpu() == 1)[0]
         for a in range(len(temp)):
             print(fn[temp[a]] + '_' + str(scorewrite[temp[a]]) + '\n')
             f.write(fn[temp[a]]+'_'+str(scorewrite[temp[a]])+'_'+'\n')
-    return count,corrects
+    return count, corrects
 
 def readedgexml():
-    edgeboxregionroot = args.root + 'edgeboxlabel/'
-    testimglist = args.root + 'testlist.txt'
+
     edgelabeldict={}
     with open(testimglist , 'r') as ftl:
         for line in ftl.readlines():
@@ -191,11 +205,10 @@ def readedgexml():
 
 def predict():
     edgelabeldict = readedgexml()
-    predictlist = args.root + 'predictabnormal.txt'
-    testimgroot = args.root + 'VAL/'
-    resroot = args.root + 'resroot/'
+
     img=[]
     lastfilename=[]
+    # os.remove(predtxtroot)
     with open(predictlist , 'r') as fpredict:
         for predictline in fpredict.readlines():
             if not predictline:
@@ -207,19 +220,29 @@ def predict():
             y = int(y)
             w = int(w)
             h = int(h)
+            x2 = x+w
+            y2 = y+h
+
             if img==[] or filename != lastfilename:
+
                 #cv2.imshow('a', img)
                 if(lastfilename):
                     cv2.imwrite(resroot + lastfilename + '.jpg', img)
+                    predtxtfile.close()
+                predtxtfile = open(predtxtroot + filename + '.txt', 'a+')
                 img = cv2.imread(testimgroot + filename + '.JPG')
                 cv2.rectangle(img, (x, y), (x + w, y + h), 255, 2)
                 cv2.putText(img,str(number)+'_'+str(score),(x,y+20),cv2.FONT_HERSHEY_SIMPLEX,1,(0,0,255),2)
+                predtxtfile.write(str(x) + '\000' + str(y) + '\000' + str(x2) + '\000' + str(y2) + '\n')
             else:
                 cv2.rectangle(img, (x, y), (x + w, y + h), 255, 2)
                 cv2.putText(img,str(number)+'_'+str(score),(x,y+20),cv2.FONT_HERSHEY_SIMPLEX,1,(0,0,255),2)
+                predtxtfile.write(str(x) + '\000' + str(y) + '\000' + str(x2) + '\000' + str(y2) + '\n')
+
             lastfilename = filename
         if (lastfilename):
             cv2.imwrite(resroot + lastfilename + '.jpg', img)
+            predtxtfile.close()
 
 # ##############################################################################
 # Save Model
@@ -253,11 +276,11 @@ try:
         }
         torch.save(model_source, args.save)
     else:
-        f = open('E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\predictabnormal.txt','w')
-        count,result = test(f)
-        f.close()
+        # f = open(predictlist,'w')
+        # count,result = test(f)
+        # f.close()
         predict()
-        print("test done.regioncount:%d,predict:%d, acc = %.4f"%(count,result,result/count))
+        # print("test done.regioncount:%d,predict:%d, acc = %.4f"%(count,count - result,result/count))
 
 
 except KeyboardInterrupt:
