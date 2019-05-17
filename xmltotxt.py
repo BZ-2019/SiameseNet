@@ -13,7 +13,7 @@ def xml_to_txt(indir,outdir):
 
         file_save = file.split('.')[0]+'.txt'
         file_txt=os.path.join(outdir,file_save)
-        f_w = open(file_txt,'w')
+        f_w = open(file_txt,'w',encoding='gbk')
 
         # actual parsing
         in_file = open(file)
@@ -32,8 +32,8 @@ def xml_to_txt(indir,outdir):
                 #print xn
                 f_w.write(xn+' '+yn+' '+xx+' '+yx+' ')
                 f_w.write(name+'\n')
-root = 'E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\R\\'
-dataset = 'ALL'
+root = 'E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\'
+dataset = 'VAL3'
 
 indir=root+'gtxml\\'+dataset
 outdir=root+'gttxt\\'+dataset  #txt目录

@@ -1,7 +1,7 @@
 import glob
 import os
 root = 'E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\'
-dataset = 'VAL1'
+dataset = 'VAL3'
 preddir=root+'restxt\\'+dataset
 gtdir=root+'gttxt\\'+dataset
 IOU_value=0.5
@@ -9,7 +9,7 @@ TurePositive = 0
 FalsePositive = 0
 dectecount = 0
 def compute_iou(rec1, rec2):
-    """
+    """R
     computing IoU
     :param rec1: (y0, x0, y1, x1), which reflects
             (top, left, bottom, right)
@@ -84,7 +84,7 @@ for path in os.listdir(preddir):
         gt_dec_count.update({path:len(dectec_gt_indexlist)})
         sum_gt_dec+=len(dectec_gt_indexlist)
     else:
-        fpre = open(preddir + '\\' + path)
+        fpre = open(preddir + '\\' + path,encoding='gbk')
         for predictline in fpre.readlines():
             dectecount += 1
             FalsePositive += 1
