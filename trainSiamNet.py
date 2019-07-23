@@ -13,7 +13,7 @@ import torch.nn.functional as F
 import Siamesevgg
 import os
 parser = argparse.ArgumentParser(description='SiameseNet')
-parser.add_argument('--save', type=str, default='./SiameseNet_10.pt',
+parser.add_argument('--save', type=str, default='./SiameseNet.pt',
                     help='path to save the final model')
 
 

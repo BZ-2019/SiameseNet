@@ -4,7 +4,7 @@ root = 'E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\'
 dataset = 'VAL3'
 preddir=root+'restxt\\'+dataset
 gtdir=root+'gttxt\\'+dataset
-IOU_value=0.5
+IOU_value=0.1
 TurePositive = 0
 FalsePositive = 0
 dectecount = 0
@@ -69,25 +69,20 @@ for path in os.listdir(preddir):
             x2 = int(predictline.split('\000')[2])
             y2 = int(predictline.split('\000')[3])
             prerec = tuple((y1, x1, y2, x2))
-
+            dectecount += 1
 
             for index in range(len(gtrec)):
                 IOU = compute_iou(gtrec[index],prerec)
                 if IOU>IOU_value:
-                    dectecount += 1
                     TurePositive+=1
                     if index not in dectec_gt_indexlist:
                         dectec_gt_indexlist.append(index)
-                else:
-                    dectecount += 1
-                    FalsePositive+=1
         gt_dec_count.update({path:len(dectec_gt_indexlist)})
         sum_gt_dec+=len(dectec_gt_indexlist)
     else:
         fpre = open(preddir + '\\' + path,encoding='gbk')
         for predictline in fpre.readlines():
             dectecount += 1
-            FalsePositive += 1
 
 print("deteccount:{},TurePositive:{},FalsePositive:{}".format(dectecount,TurePositive,FalsePositive))
 print("abnormalsum:{},abnormaldec:{}".format(sum_gt_rec,sum_gt_dec))

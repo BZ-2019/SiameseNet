@@ -33,7 +33,7 @@ def xml_to_txt(indir,outdir):
                 f_w.write(xn+' '+yn+' '+xx+' '+yx+' ')
                 f_w.write(name+'\n')
 root = 'E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\'
-dataset = 'VAL3'
+dataset = 'VAL5'
 
 indir=root+'gtxml\\'+dataset
 outdir=root+'gttxt\\'+dataset  #txt目录

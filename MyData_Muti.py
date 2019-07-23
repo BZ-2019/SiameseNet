@@ -41,7 +41,7 @@ class MyDataset(Dataset):  # 创建自己的类：MyDataset,这个类是继承�
             tureimg2 = self.transform(tureimg2)  # 是否进行transform
             tureimg3 = self.transform(tureimg3)  # 是否进行transform
 
-        return rawimg, tureimg1,tureimg2,tureimg3, falseimg  # return很关键，return回哪些内容，那么我们在训练时循环读取每个batch时，就能获得哪些内容
+        return rawimg, tureimg1,tureimg2,tureimg3, falseimg,1,0  # return很关键，return回哪些内容，那么我们在训练时循环读取每个batch时，就能获得哪些内容
 
     def __len__(self):
         return len(self.imgs)

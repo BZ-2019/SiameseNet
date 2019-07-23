@@ -22,7 +22,7 @@ parser.add_argument('--save', type=str, default='./SiameseNet.pt',
 parser.add_argument('--unuse-cuda', action='store_true',
                     help='unuse cuda')
 
-parser.add_argument('--lr', type=float, default=0.0001)   #20190401 0.000001
+parser.add_argument('--lr', type=float, default=0.00001)   #20190401 0.000001
 parser.add_argument('--epochs', type=int, default=1,
                     help='number of epochs for train')
 parser.add_argument('--batch_size', type=int, default=32,
@@ -35,14 +35,15 @@ parser.add_argument('--dropout', type=float, default=0.)
 parser.add_argument('--num-class', type=int, default=2)
 parser.add_argument('--growth-rate', type=int, default=12)
 parser.add_argument('--channels', type=int, default=1)
-parser.add_argument('--root', type=str, default='E:\\liuyuming\\SiameseNet\\DATA\\WH180605\\L\\')
+parser.add_argument('--root', type=str, default='E:\\liuyuming\\SiameseNet\\DATA\\GT180702\\L\\') #GT180702 WH180605
 parser.add_argument('--GPU', type=int, default=1)
 parser.add_argument('--Train', type=bool, default=False)
+parser.add_argument('--Resume', type=bool, default=True)
 args = parser.parse_args()
 if args.Train:
     dataset = 'TRAIN'
 else:
-    dataset = 'VAL3'
+    dataset = 'ALL'
 
 rawpicroot = args.root+'imshow_root/'
 turepicroot = args.root+'regionture/'
@@ -52,19 +53,24 @@ RegionListVal = args.root+'regionlist/'+dataset+'.txt'
 RegionListTest = args.root+'regionlist/'+dataset+'.txt'
 
 edgeboxregionroot = args.root + 'edgeboxlabel/'
+if not os.path.exists(args.root + 'testlist/'):
+    os.makedirs(args.root + 'testlist/')
 testimglist = args.root + 'testlist/'+dataset+'.txt'
+if not os.path.exists(args.root + 'predict/'):
+    os.makedirs(args.root + 'predict/')
 predictlist = args.root + 'predict/'+dataset+'.txt'
-if dataset == 'VAL' or dataset == 'TEST' or dataset == 'ALL' or dataset == 'VAL3':
-    testimgroot = args.root + 'DATASET/'+'MergeImg'+dataset+'/'
-else:
+if dataset == 'VAL1' or dataset == 'VAL2':
     testimgroot = args.root + 'DATASET/' + dataset + '/'
+else:
+    testimgroot = args.root + 'DATASET/' + 'MergeImg' + dataset + '/'
+
 resroot = args.root + 'resroot/'+dataset+'/'
 predtxtroot = args.root + 'restxt/'+dataset+'/'
 use_cuda = torch.cuda.is_available() and not args.unuse_cuda
 if args.Train:
     torch.cuda.set_device(args.GPU)
 else:
-    torch.cuda.set_device(2)
+    torch.cuda.set_device(3)
 transform = transforms.Compose([
     transforms.ToTensor(), #将图片转换为Tensor,归一化至[0,1]
     transforms.Normalize(mean=[.5,.5,.5],std=[.5,.5,.5]) #标准化至[-1,1]
@@ -104,7 +110,10 @@ if args.Train==True:
 #
     #model_dict.update(pretrained_dict)
     #Siamesenet.load_state_dict(model_dict)
-    Siamesenet._initialize_weights()
+    if args.Resume==False:
+        Siamesenet._initialize_weights()
+    else:
+        Siamesenet.load_state_dict(torch.load(args.save)['model'])
     #Siamesenet = torch.nn.DataParallel(Siamesenet, device_ids=[1, 2, 3])
 else:
     Siamesenet.load_state_dict(torch.load(args.save)['model'])
@@ -114,6 +123,7 @@ if use_cuda:
 
 optimizer = torch.optim.Adam(Siamesenet.parameters(), lr=args.lr)
 criterion = torch.nn.TripletMarginLoss()
+criterion_cl = torch.nn.CrossEntropyLoss()
 L1loss = torch.nn.L1Loss()
 # Siamloss = Siamesevggtriple.ContrastiveLoss()
 testtransform =transforms.ToTensor()
@@ -125,7 +135,7 @@ testtransform =transforms.ToTensor()
 
 def train():
     corrects = total_loss = 0
-    for i, (rawdata, turedata1,turedata2,turedata3, falsedata) in enumerate(data_loader):
+    for i, (rawdata, turedata1,turedata2,turedata3, falsedata,label_p,label_n) in enumerate(data_loader):
         rawdata = Variable(rawdata)
         a=int(random.random()*2)
         if a==0:
@@ -135,12 +145,23 @@ def train():
         else:
             turedata = Variable(turedata3)
         falsedata = Variable(falsedata)
-
+        label_p = Variable(label_p)
+        label_n = Variable(label_n)
         if use_cuda:
             rawdata, turedata, falsedata = rawdata.cuda(),turedata.cuda(), falsedata.cuda()
+            label_p, label_n = label_p.cuda(), label_n.cuda()
 
-        out1,out2,out3 = Siamesenet(rawdata,turedata,falsedata)
+        out1,out2,out3 = Siamesenet.forward(rawdata,turedata,falsedata)
+
         loss = criterion(out1,out2,out3)
+
+
+        # cl1 = Siamesenet.forward_classifier(rawdata, turedata, falsedata)
+
+        # predicted_labels = torch.cat([cl1, cl2, cl3])
+        # true_labels = torch.cat([label_p, label_p, label_n])
+        # loss_cl = criterion(predicted_labels,true_labels)
+        # loss = loss+loss_cl
         #loss = Siamloss(rawout,pariout,label)
         optimizer.zero_grad()
         loss.backward()
@@ -204,25 +225,125 @@ def py_cpu_nms(dets, thresh):
 
     return keep
 
+def py_cpu_nms_soft(box, threshold=0.001, sigma=0.5, Nt=0.3, method=1):
+    N = len(box)
+    for i in range(N):
+        maxscore = box[i, 4]
+        maxpos = i
+
+        tx1 = box[i, 0]
+        ty1 = box[i, 1]
+        tx2 = box[i, 2]
+        ty2 = box[i, 3]
+        ts = box[i, 4]
+
+        pos = i + 1
+        # get max box
+        while pos < N:
+            if maxscore < box[pos, 4]:
+                maxscore = box[pos, 4]
+                maxpos = pos
+            pos = pos + 1
+
+        # add max box as a detection
+        box[i, 0] = box[maxpos, 0]
+        box[i, 1] = box[maxpos, 1]
+        box[i, 2] = box[maxpos, 2]
+        box[i, 3] = box[maxpos, 3]
+        box[i, 4] = box[maxpos, 4]
+
+        # swap ith box with position of max box
+        box[maxpos, 0] = tx1
+        box[maxpos, 1] = ty1
+        box[maxpos, 2] = tx2
+        box[maxpos, 3] = ty2
+        box[maxpos, 4] = ts
+
+        tx1 = box[i, 0]
+        ty1 = box[i, 1]
+        tx2 = box[i, 2]
+        ty2 = box[i, 3]
+        ts = box[i, 4]
+
+        pos = i + 1
+
+        # NMS iterations, note that N changes if detection box fall below threshold
+        while pos < N:
+            x1 = box[pos, 0]
+            y1 = box[pos, 1]
+            x2 = box[pos, 2]
+            y2 = box[pos, 3]
+            s = box[pos, 4]
+
+            area = (x2 * y2)#(x2 - x1 + 1) * (y2 - y1 + 1)
+            iw = (min(tx1 + tx2, x1 + x2) - max(tx1, x1) + 1) #(min(tx2, x2) - max(tx1, x1) + 1)
+            if iw > 0:
+                ih = (min(ty1 + ty2, y1 + y2) - max(ty1, y1) + 1) #(min(ty2, y2) - max(ty1, y1) + 1)
+                if ih > 0:
+                    ua = float(tx2 * ty2 + area - iw * ih)#float((tx2 - tx1 + 1) * (ty2 - ty1 + 1) + area - iw * ih)
+                    ov = iw * ih / ua  # iou between max box and detection box
+
+                    if method == 1:  # linear
+                        if ov > Nt:
+                            weight = 1 - ov
+                        else:
+                            weight = 1
+                    elif method == 2:  # gaussian
+                        weight = np.exp(-(ov * ov) / sigma)
+                    else:  # original NMS
+                        if ov > Nt:
+                            weight = 0
+                        else:
+                            weight = 1
+
+                    box[pos, 4] = weight * box[pos, 4]
+
+                    # if box score falls below threshold, discard the box by swapping with last box
+                    # update N
+                    if box[pos, 4] < threshold:
+                        box[pos, 0] = box[N - 1, 0]
+                        box[pos, 1] = box[N - 1, 1]
+                        box[pos, 2] = box[N - 1, 2]
+                        box[pos, 3] = box[N - 1, 3]
+                        box[pos, 4] = box[N - 1, 4]
+                        N = N - 1
+                        pos = pos - 1
+
+            pos = pos + 1
+
+    keep = [i for i in range(N)]
+    return keep
 
 def test(f):
     corrects = total_loss = 0
     count =0
     Siamesenet.eval()
     test_batchsize=1
-    nmsthresh=0.2
+    nmsthresh=0.1
     with open(testimglist , 'r') as ftl:
         for testimgname in ftl.readlines():
-
+            if testimgname[:-5] == '00241':
+                aaaaa=0
             bbs=[]
-            for index in range(60):
+            for index in range(100):
+                if index==56:
+                    aaaa=0
                 regionname = testimgname[:-5]+'_'+str(index)+'.jpg'
                 allimg = cv2.imread(rawpicroot + regionname)  # 按照path读入图片from PIL import Image # 按照路径读取图片
                 try:
                     allimg.shape
                 except:
-                    print(rawpicroot + regionname)
-                    continue
+                    regionname = testimgname[:-4] + '_' + str(index) + '.jpg'
+
+
+
+                    allimg = cv2.imread(rawpicroot + regionname)  # 按照path读入图片from PIL import Image # 按照路径读取图片
+                    try:
+                        allimg.shape
+                    except:
+                        print(rawpicroot + regionname)
+                        continue
+                    # continue
                 size = allimg.shape[1] // 5
                 rawimg = allimg[:, 0:size, :]
                 tureimg1 = allimg[:, 1 * size:2 * size, :]
@@ -249,15 +370,15 @@ def test(f):
                     rawdata, turedata1, falsedata,turedata2,turedata3 = rawdata.cuda(),turedata1.cuda(), falsedata.cuda(),turedata2.cuda(),turedata3.cuda()
                 out1, out2, out5 = Siamesenet(rawdata, turedata1,falsedata)
                 out1, out3, out4 = Siamesenet(rawdata, turedata2, turedata3)
-                euclidean_distance = F.pairwise_distance(out1, out2)
+                euclidean_distance0 = F.pairwise_distance(out1, out2)
                 euclidean_distance1 = F.pairwise_distance(out1, out3)
                 euclidean_distance2 = F.pairwise_distance(out1, out4)
                 euclidean_distance3 = F.pairwise_distance(out1, out5)
-                euclidean_distance = torch.cat((euclidean_distance,euclidean_distance1,euclidean_distance2,euclidean_distance3),dim=0)
+                euclidean_distance = torch.cat((euclidean_distance0,euclidean_distance1,euclidean_distance2,euclidean_distance3),dim=0)
                 euclidean_distance,_ = torch.sort(euclidean_distance)
                 euclidean_distance = euclidean_distance[0].reshape(-1,1)
                 scorewrite=euclidean_distance.clone()
-                L2_threshold = 4
+                L2_threshold = 0.6
                 if euclidean_distance >L2_threshold:
                     aaaaaa=0
                 euclidean_distance[euclidean_distance <=L2_threshold] = 0
@@ -273,7 +394,14 @@ def test(f):
                 corrects +=(predicttemp== 0).cpu().sum().numpy()
                 count +=rawdata.shape[0]
                 temp = np.where(predicttemp.cpu() == 1)[0]
-                x, y, w ,h=linecache.getline(edgeboxregionroot+testimgname[:-5]+'.txt', index+1).split()
+                try:
+                    x, y, w ,h=linecache.getline(edgeboxregionroot+testimgname[:-5]+'.txt', index+1).split()
+                except:
+                    try:
+                        x, y, w, h = linecache.getline(edgeboxregionroot + testimgname[:-4] + '.txt', index + 1).split()
+                    except:
+                        print(edgeboxregionroot + testimgname[:-5] + '.txt', index + 1)
+
                 x = int(x)
                 y = int(y)
                 w = int(w)
@@ -284,11 +412,12 @@ def test(f):
             bbs = np.array(bbs)
             if len(bbs)==0:
                 continue
-            new_bbsindex = py_cpu_nms(bbs[:,0:5],nmsthresh)
+            #new_bbsindex = py_cpu_nms_soft(bbs[:,0:5],threshold=0.5, sigma=0.5, Nt=0.3, method=1)
+            new_bbsindex = py_cpu_nms(bbs[:, 0:5], thresh=0.5)
             new_bbs = bbs[new_bbsindex]
             for a in range(len(new_bbs)):
-                print(testimgname[:-5] + '_'+str(int(bbs[a,5]))+ '_'+str(bbs[a,4]) + '\n')
-                f.write(testimgname[:-5] + '_'+str(int(bbs[a,5])) + '_' + str(bbs[a,4])  + '\n')
+                print(testimgname[:-5] + '_'+str(int(new_bbs[a,5]))+ '_'+str(new_bbs[a,4]) + '\n')
+                f.write(testimgname[:-5] + '_'+str(int(new_bbs[a,5])) + '_' + str(new_bbs[a,4])  + '\n')
 
     return count, corrects
 
@@ -327,7 +456,11 @@ def predict():
                 break
             word = predictline.split('_')
             filename, number,score = word[0], int(word[1]),float(word[2])
-            [x, y, w, h] = edgelabeldict[filename+'.JPG'+'\n'][number].split()
+            try:
+                [x, y, w, h] = edgelabeldict[filename+'.JPG'+'\n'][number].split()
+            except:
+                print("nummber out of index")
+                continue
             x = int(x)
             y = int(y)
             w = int(w)
@@ -406,7 +539,7 @@ try:
     print('-' * 90)
     if args.Train==True:
         for epoch in range(1, args.epochs+1):
-            epoch_start_time = time.time()   
+            epoch_start_time = time.time()
             print("begin")
             loss = train()
             print("*****************************************************&*********")

@@ -23,13 +23,26 @@ class VGG(nn.Module):
     def __init__(self, features, num_classes=2):
         super(VGG, self).__init__()
         self.features = features
-        self.classifierpari = nn.Sequential(
+        self.fc = nn.Sequential(
             nn.Linear(512 * 7 * 7, 32*128),
             nn.Linear(32 * 128, 128)#,
             #nn.Sigmoid()
         )
+        self.classifier = nn.Linear(128, 2)
         self._initialize_weights()
 
+    def l2_norm(self, input):
+        input_size = input.size()
+        buffer = torch.pow(input, 2)
+
+        normp = torch.sum(buffer, 1).add_(1e-10)
+        norm = torch.sqrt(normp)
+
+        _output = torch.div(input, norm.view(-1, 1).expand_as(input))
+
+        output = _output.view(input_size)
+
+        return output
     def forward(self, rawx,turex,falsex):
         rawx = self.features(rawx)
         parix = self.features(turex)
@@ -37,11 +50,19 @@ class VGG(nn.Module):
         rawx = rawx.view(rawx.size(0), -1)
         parix = parix.view(parix.size(0), -1)
         falsex = falsex.view(falsex.size(0), -1)
-        rawx = self.classifierpari(rawx)
-        parix = self.classifierpari(parix)
-        falsex = self.classifierpari(falsex)
 
+        rawx = self.fc(rawx)
+        parix = self.fc(parix)
+        falsex = self.fc(falsex)
+        rawx = self.l2_norm(rawx)
+        parix = self.l2_norm(parix)
+        falsex = self.l2_norm(falsex)
         return rawx,parix ,falsex
+
+    def forward_classifier(self, x):
+        features = self.forward(x)
+        res = self.classifier(features)
+        return res
 
     def _initialize_weights(self):
         for m in self.modules():
